@@ -1,13 +1,13 @@
 from collections import Counter
 from json.decoder import JSONDecodeError
-from utilities.api_keys import *
 from nltk.corpus import stopwords
+from sys import stderr
+from utilities.api_keys import *
 from urllib.error import URLError
 from utilities.reddit_toolkit import RedditExplorer
 from utilities.sentiment_toolkit import SentimentClassifier
 
 import utilities.entity_toolkit as et
-
 
 # Interface between flask and the core of this project.
 
@@ -31,31 +31,41 @@ class Interface(object):
             :return: A string containing the passed comment, but with the markdown
                     tags replaced by html tags. I.E., ## becomes <h2>, ** becomes <i>,
                     etc.
+            TODO: Complete this method.
             """
             pass
 
-        def heuristic_for_comment(comment, score, entities, parent_party=0):
-            val = 0
-
+        def heuristic_for_comment(*, comment_text, comment_score, found_entities, parent_party=0):
+            """
+            :param comment_text: The text of a comment being analyzed
+            :param comment_score: The integer score of the comment
+            :param found_entities: Political entities identified in the comment
+            :param parent_party: TODO: Implement parent party.
+                                 In later incarnations of this program, this is set to take in the party
+                                 of the parent comment (if this is a child comment) so that if there is no
+                                 strong party mention within this comment, we can assume it is referring to the
+                                 parent comment.
+            :return:
+            """
             try:
                 affiliations = [self.ent_linker.entity_to_political_party(entity=entity, ent_type=ent_type)
-                                for entity, ent_type in entities]
+                                for entity, ent_type in found_entities]
                 affiliations = [x for x in affiliations if x is not None]
             except (ConnectionError, URLError, JSONDecodeError) as e:
+                # TODO: Diagnose these minor, occasional, and straggling errors.
+                stderr.write("ERROR: Comment heuristic: {}\n".format(e))
                 return 0
-            party_count = Counter([affiliation[1] for affiliation in affiliations])
-            try:
-                most_common_party = party_count.most_common(1)[0][0]
-                party_val = self.ent_linker.political_party_to_value(most_common_party)
-                if party_val != 0:
-                    val += score*party_val
-            except IndexError:
-                val = 0
 
-            if val != 0:
-                new_val = self.sentiment.predict(comment)
-                val = val*new_val
-            return val
+            if affiliations:
+                party_count = Counter([affiliation[1] for affiliation in affiliations])
+                most_common_party = party_count.most_common(1)[0][0]
+                political_lean = self.ent_linker.political_party_to_value(most_common_party)
+            else:
+                return 0
+
+            sentiment_score = self.sentiment.predict(comment_text)
+            final_value = sentiment_score*comment_score*political_lean
+            return final_value
 
         # Process the number of discussions described above
         discussions = []

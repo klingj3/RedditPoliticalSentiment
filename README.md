@@ -14,6 +14,8 @@ Create a virtual environment, within this environment run the following command 
 
   pip3 install -r requirements.txt
 
+Next, install the required NLTK corpora dependencies through running the dependency_initialization program in the utilities folder.
+
 #### Flask Launch
 
 Now traverse into the flask directory, and use the following command to point flask to this application.

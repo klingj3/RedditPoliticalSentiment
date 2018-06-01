@@ -1,36 +1,23 @@
 # Collection of the frequently called functions we'll be using for entity linking
 
-from bs4 import BeautifulSoup
-from nltk import ne_chunk, pos_tag, word_tokenize
+from nltk import ne_chunk, pos_tag
 from nltk.tree import Tree
 from wikidata.client import Client
 from nltk.corpus import stopwords
 
 import nltk.tokenize
 import os
-import re
 import requests
 import sys
 import wikipedia
 import urllib3
 import json
-from unidecode import unidecode
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-from nltk.tag import StanfordNERTagger
 from nltk.tokenize import word_tokenize
 
 # Load/generate requisite nltk files
-try:
-    tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
-except LookupError:
-    nltk.download('punkt')
-    tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
-try:
-    stop_words = set(stopwords.words('english'))
-except LookupError:
-    nltk.download('stopwords')
-    stop_words = set(stopwords.words('english'))
+tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
+stop_words = set(stopwords.words('english'))
 
 class EntityLinker(object):
     def __init__(self, *, path='saved_data/entity_files/dict.json'):
@@ -44,6 +31,75 @@ class EntityLinker(object):
             self.ent_dict = {}
             # Save dictionary to json file
             self.save_dictionary()
+
+    # This tagger is a vestige of an earlier version, now used as a jumping off point as I supplant
+    # the professor's API
+    class Tagger(ChunkParserI):
+        def __init__(self, data=None, test=False, force_new=False, **kwargs):
+            def features(tokens, index, _):
+                word, pos = tokens[index]
+                prev_word, prev_pos = tokens[index - 1] if index > 0 else ('START', 'START')
+                next_word, next_pos = tokens[index + 1] if index + 1 < len(tokens) else ('END', 'END')
+
+                return {
+                    'word': word,
+                    'pos': pos,
+
+                    'next-word': next_word,
+                    'next-pos': next_pos,
+
+                    'prev-word': prev_word,
+                    'prev-pos': prev_pos,
+                }
+
+            if force_new or not os.path.isfile('cached_data/tagger.p'):
+                # Default parameter described here rather in line so we can check file exists.
+                data = conll2000.chunked_sents()
+                data = list(data)
+                # Randomize the order of the data
+                random.shuffle(data)
+                # Its a large corpus, so just 10% suffices.
+                training_data = data[:int(.1 * len(data))]
+                test_data = data[int(.1 * len(data)):]
+
+                training_data = [tree2conlltags(sent) for sent in training_data]
+                training_data = [[((word, pos), chunk) for word, pos, chunk in sent] for sent in training_data]
+
+                self.feature_detector = features
+                self.tagger = ClassifierBasedTagger(
+                    train=training_data,
+                    feature_detector=features,
+                    **kwargs)
+
+                # TODO: Find way to save classifier
+                ''' 
+                with open('cached_data/tagger.p', 'wb') as output:
+                    pickle.dump(self.tagger, output, pickle.HIGHEST_PROTOCOL)
+            else:
+                with open('cached_data/tagger.p', 'rb') as input:
+                    self.tagger = pickle.load(input)
+                '''
+            if test:
+                print(self.evaluate(test_data))
+
+        def parse(self, tagged_sent):
+            chunks = self.tagger.tag(tagged_sent)
+
+            # Transform the result from [((w1, t1), iob1), ...]
+            # to the preferred list of triplets format [(w1, t1, iob1), ...]
+            iob_triplets = [(w, t, c) for ((w, t), c) in chunks]
+
+            # Transform the list of triplets to nltk.Tree format
+            return conlltags2tree(iob_triplets)
+
+
+    def preprocess(comment):
+        # Break into individual sentences.
+        sentences = [nltk.tokenize.word_tokenize(sentence) for sentence in tokenizer.tokenize(comment)]
+        # Apply basic POS tagging.
+        tagged_sentences = [nltk.pos_tag(sentence) for sentence in sentences]
+        return tagged_sentences
+
 
     def load_dictionary(self):
         """
@@ -60,81 +116,15 @@ class EntityLinker(object):
         with open(self.path, 'w') as outfile:
             json.dump(self.ent_dict, outfile)
 
-    def pretty_print_json(self, ent_dict):
-        """
-        :action: Pretty prints dictionary to console
-        :param ent_dict: Diciontary containing previously affiliated entities
-        :return: None
-        """
-        print(json.dumps(ent_dict, indent=4, sort_keys=True))
-
-
-    def identify_entity(self, sentence):
-        """
-        :param sentence:
-        :return: A list of entities and events in the order they appear in the sentence
-        """
-        service_url = 'https://blender04.cs.rpi.edu/~jih/cgi-bin/ere.py'
-        payload = {'textcontent': sentence}
-        r = requests.post(service_url, data=payload)
-
-        parsed_html = BeautifulSoup(r.text, "html.parser")
-        # We are only concerned about the div lines as that's where the entities and events are in the HTML
-        mentions = parsed_html.findAll('div')
-
-        # Our list of entities and events
-        tagged_mentions = []
-
-        # For each mention in sentence
-        for i in mentions:
-            # If it is an entity like "George Bush"
-            if (str(i).startswith("<div id=\"d")):
-                entity_id = re.sub("(.+Entity ID: )|(<br/>.+)", "", str(i))
-                entity_mention = re.sub("(.+Entity Mention: )|(<br/>.+)", "", str(i))
-                entity_mention_type = re.sub("(.+Entity Mention Type: )|(<br/>.+)", "", str(i))
-                entity_type = re.sub("(.+Entity Type: )|(<br/>.+)", "", str(i))
-                entity_class = re.sub("(.+Entity Class: )|(<br/>.+)", "", str(i))
-                tagged_mentions.append(['Entity', entity_id, entity_mention, entity_mention_type, entity_type,
-                                        entity_class])
-        return tagged_mentions
 
     def identify_all_entities(self, comments, filter=True):
         """
         :param comments: A list of comments
         :return: A list of entities and events in the order they appear in the comment section, by each comment
         """
-        combined_string = ""
-        for comment_body, _ in comments:
-            combined_string += "-/:_START_OF_COMMENT_:/- " + unidecode(comment_body) + " -/:_END_OF_COMMENT_:/-"
+        for comment in comments:
 
-        service_url = 'https://blender04.cs.rpi.edu/~jih/cgi-bin/ere.py'
-        payload = {'textcontent': combined_string}
-        r = requests.post(service_url, data=payload)
 
-        parsed_html = BeautifulSoup(r.text, "html.parser")
-
-        html_string = str(parsed_html).replace('\n', ' ')
-
-        comment_list = (re.findall(r"-/:_START_OF_COMMENT_:/-(.*?)-/:_END_OF_COMMENT_:/-", html_string))
-
-        tagged_mentions_all_comments = []
-
-        for comment in comment_list:
-            parsed_html = BeautifulSoup(comment, "html.parser")
-            mentions = parsed_html.findAll('div')
-
-            # Our list of entities and events
-            taggged_mentions = []
-
-            # For each raw entity (still in html) in list
-            for entity_html in mentions:
-                # If it is an entity like "George Bush", parse out the entity and type
-                if (str(entity_html).startswith("<div id=\"d")):
-                    entity_mention = re.sub("(.+Entity Mention: )|(<br/>.+)", "", str(entity_html))
-                    entity_type = re.sub("(.+Entity Type: )|(<br/>.+)", "", str(entity_html))
-                    taggged_mentions.append((entity_mention, entity_type))
-            tagged_mentions_all_comments.append(taggged_mentions)
-        return tagged_mentions_all_comments
 
     def get_all_entity_political_parties(self, entity_list):
         """

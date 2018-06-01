@@ -9,11 +9,7 @@ import tflearn
 import os
 
 # Load requisite datasets.
-try:
-    stop_words = set(stopwords.words('english'))
-except LookupError:
-    nltk.download('stopwords')
-    stop_words = set(stopwords.words('english'))
+stop_words = set(stopwords.words('english'))
 
 class SentimentClassifier(object):
     def __init__(self, *, load_path=None, save_path='saved_data/trained_models/model.tfl'):
