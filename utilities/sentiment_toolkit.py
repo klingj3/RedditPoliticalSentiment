@@ -1,4 +1,3 @@
-import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
 from keras.datasets import imdb
@@ -6,10 +5,10 @@ from tflearn.data_utils import to_categorical, pad_sequences
 
 import tensorflow as tf
 import tflearn
-import os
 
 # Load requisite datasets.
 stop_words = set(stopwords.words('english'))
+
 
 class SentimentClassifier(object):
     def __init__(self, *, load_path=None, save_path='saved_data/trained_models/model.tfl'):
@@ -32,7 +31,7 @@ class SentimentClassifier(object):
         if load_path is None:
             self._train_model(save_path)
         else:
-            self._load_model(load_path)
+            self.model.load(load_path)
 
     def _train_model(self, save_path):
         '''
@@ -55,13 +54,6 @@ class SentimentClassifier(object):
         self.model.fit(train_x, train_y, n_epoch=5, validation_set=(test_x, test_y), show_metric=True, batch_size=32)
         self.model.save(save_path)
 
-    def _load_model(self, load_path):
-        '''
-        :param filename: .tfl file to be loaded.
-        :return: None
-        '''
-        self.model.load(load_path)
-
     def predict(self, text, full_probs=False):
         '''
         :param text: Text to be classified.
@@ -82,17 +74,6 @@ class SentimentClassifier(object):
             else:
                 return 2*probs.index(max(probs))-1
 
-    def check_conversion(self, text):
-        """
-        TODO: REMOVE BEFORE FINAL RELEASE
-        This is a function used just to check that the conversion of words to vectors is being done correctly.
-        :param text: Text to be evaluated
-        :return: A string representing the conversion of this text to tokens, tokens to vector, and vector back to text.
-        """
-        words = self.tokenizer.tokenize(text)
-        vector = self.words_to_vector(words)
-        return vector, self.vector_to_words(vector)
-
     def vector_to_words(self, vector):
         '''
         :param vector: Vector of numbers corresponding to words in the dictionary used in the given corpus
@@ -110,8 +91,6 @@ class SentimentClassifier(object):
         vector = [1] + [self.word_to_id[word] if word in self.word_to_id and self.word_to_id[word] <= max else 2 for word in words]
         return vector
 
-    def in_dictionary(self, word):
-        return word in self.word_to_id
 
 if __name__ == '__main__':
     # If run individually, we build the classifier.

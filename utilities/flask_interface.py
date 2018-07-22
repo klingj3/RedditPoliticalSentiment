@@ -35,7 +35,7 @@ class Interface(object):
             """
             pass
 
-        def heuristic_for_comment(*, comment_text, comment_score, found_entities, parent_party=0):
+        def heuristic_for_comment(comment_text, comment_score, found_entities, parent_party=0):
             """
             :param comment_text: The text of a comment being analyzed
             :param comment_score: The integer score of the comment
@@ -78,8 +78,9 @@ class Interface(object):
             # In some subreddits, comment scores are hidden for the first several hours. We can't analyze
             # these, so they aren't returned in all comments.
             if len(all_comments) > 0:
-                comment_entities = self.ent_linker.identify_all_entities(all_comments)
-                comment_entities = self.remove_non_political_entities(comment_entities)
+                comment_entities = self.ent_linker.identify_entities(all_comments)
+
+                # Generate word-specific details for our showcased top comments.
                 for i, comment in enumerate(self.rt.top_comments(submission.comments, num_top_com)):
                     comm = {
                             'words': comment.body.split(' '),
@@ -92,9 +93,9 @@ class Interface(object):
 
                     # We'll ignore thing that are upper-case too, partially because they're more likely to be
                     # false-positives, but also because people who type in caps aren't contributing to the conversation.
-                    affiliations = [(entity, self.ent_linker.entity_to_political_party(entity=entity, ent_type=ent_type)) for
-                                    entity, ent_type in entities if
-                                    self.ent_linker.entity_to_political_party(entity=entity, ent_type=type) is not None
+                    affiliations = [(entity, self.ent_linker.entity_to_political_party(entity=entity, ent_type=ent_type))
+                                    for entity, ent_type in entities
+                                    if self.ent_linker.entity_to_political_party(entity=entity, ent_type=type)
                                     and entity != entity.upper()]
 
                     for entity, affiliation in affiliations:
@@ -128,6 +129,3 @@ class Interface(object):
 
         return discussions
 
-    def remove_non_political_entities(self, all_entities):
-        return [[tup for tup in comment_entities if tup[0].lower() not in self.stop_words
-                and not self.sentiment.in_dictionary(tup[0])] for comment_entities in all_entities]
