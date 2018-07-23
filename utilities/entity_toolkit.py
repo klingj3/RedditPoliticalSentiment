@@ -5,7 +5,7 @@ from nltk.corpus import stopwords
 
 import nltk.tokenize
 import os
-import requests
+import pywikibot
 import wikipedia
 import ujson
 
@@ -72,43 +72,47 @@ class EntityLinker(object):
         :return: A string representing the political party or affiliation of the entity described in the wikipage, if
                 available. Otherwise, None.
         """
-        resp = requests.get(url='https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageprops&titles=' + title)
-        data = resp.json()
-        page_data = data['query']['pages'][list(data['query']['pages'].keys())[0]]
+        site = pywikibot.Site("en", "wikipedia")
+        page = pywikibot.Page(site, title)
+        page = pywikibot.ItemPage.fromPage(page).get()
+
         try:
-            page_properties = page_data['pageprops']
-            item_id = page_properties['wikibase_item']
-        except KeyError:
+            party_page = page['claims']['P102'][0].getTarget().get()
+        except (KeyError, pywikibot.NoPage):
+            # No political party listed for this figure, so return None.
             return None
 
-        # With item id in tow, extract political affiliation
-        client = Client()
-        entity = client.get(item_id, load=True)
-        try:
-            party_entity = entity.getlist(client.get('P102'))[0]
-            return str(party_entity.label())
-        except (KeyError, IndexError):
-            # If the P102 (Political Party) field does not exist in this entity, return None.
+        # The English labels are usually a list, but sometimes appear as a string.
+        english_labels = party_page['labels']['en']
+        if isinstance(english_labels, list):
+            return english_labels[0]
+        elif isinstance(english_labels, str):
+            return english_labels
+        else:
             return None
 
-    def entity_to_political_party(self, entity_name, building_dict=True, lookup_enabled=True):
+
+    def entity_to_political_party(self, entity, building_dict=True, lookup_enabled=True, dict_allowed=True):
         """
         Given an entity, return the political affiliation of that entity if one is available. Otherwise, return
         'None found'.
-        :param entity_name: A string containing the entity to be recognized, i.e. 'Barack Obama' # TODO FIX
+        :param entity: A tuple of strings containing the name of a detected entity and its type, such as
+        ('Barack Obama', 'PERSON')
         :param building_dict: If true, then newly discovered entities will be added to our
         :param lookup_enabled: Allows looking up terms not already in our dictionary of previous viewed
         entities on Wikipedia. Due to the unavoidable delay which comes with pulling data from Wikipedia,
         and the sheer number of entities mentioned in any given comment chain, this variable is here to
         be disabled in a production setting to speed up the final results.
+        :param dict_allowed: Allows the dictionary of already seen entities to be used or disallowed, only used
+        in testing.
         :return: A tuple of two strings, the full entity discovered and the party of this entity, if a politically
         affiliated full entity was found. Otherwise, None is returned.
         """
 
-        entity_name, ent_type = entity_name
+        entity_name, ent_type = entity
 
         # If already in dictionary, return dict entry instead of looking on Wikipedia
-        if entity_name.lower() in self.ent_dict:
+        if dict_allowed and entity_name.lower() in self.ent_dict:
             try:
                 if "None" in self.ent_dict[entity_name.lower()][1]:
                     return None
@@ -119,33 +123,41 @@ class EntityLinker(object):
         elif lookup_enabled:
             pages = wikipedia.search(entity_name)
 
+            """
+            In the present incarnation of this project, we are focused on the political parties of
+            only individuals, so other type of entities can be removed. Of course, the mention of
+            geopolitical entities does have a certain political connotation, so this feature may be 
+            examined at a later point. 
+            """
             if ent_type == 'PERSON':
-                """
-                Lots of names come with an addendum in parentheses discussing the details of this person, 
-                if there are multiple wikipedia entries with the same names. 
-                """
-                page_titles = [title[:title.index('(')-1] if '(' in title else title for title in pages]
-            else:
-                """
-                In the present incarnation of this project, we are focused on the political parties of
-                only individuals, so other type of entities can be removed. Of course, the mention of
-                geopolitical entities does have a certain political connotation, so this feature may be 
-                examined at a later point. 
-                """
-                return None
 
-            # Iterate through these titles
-            for title in page_titles[:5]:
-                found_party = self.page_title_to_political_party(title)
-                if found_party:
+                """
+                It is very rare for the subject of a political discussion to not be in the first five results
+                for their name on Wikipedia, in fact in the testing done several months ago that was never the 
+                case. To save on execution time, we thus limit our exploration to the first five results with
+                some semblance to the original query.
+                """
+                # Occasionally, stop-words such as 'the' are in entities, so these are removed.
+                entity_name_components = [part for part in entity_name.split(' ')]
+
+                page_titles = []
+                for title in pages[:20]:
+                    if len(page_titles) == 5:
+                        break
+                    if any(part_of_name in title for part_of_name in entity_name_components):
+                        page_titles.append(title)
+
+                for title in page_titles:
+                    found_party = self.page_title_to_political_party(title)
+                    if found_party:
+                        if building_dict:
+                            self.ent_dict[entity_name.lower()] = (title, found_party)
+                            self.save_dictionary()
+                        return title, found_party
+                else:
                     if building_dict:
-                        self.ent_dict[entity_name.lower()] = (title, found_party)
+                        self.ent_dict[entity_name.lower()] = ('No political figure', 'None found')
                         self.save_dictionary()
-                    return title, found_party
-            else:
-                if building_dict:
-                    self.ent_dict[entity_name.lower()] = ('No political figure', 'None found')
-                    self.save_dictionary()
         return None
 
     @staticmethod

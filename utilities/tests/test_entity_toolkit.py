@@ -10,6 +10,7 @@ ent = et.EntityLinker()
 
 
 class NamedEntityDetection(TestCase):
+
     sent_ner = [
         "One president is Barack Obama, who was the president of the United States from 2008 until 2016.",
         "During World War II, the Nazi Party in Germany was headed by Adolf Hitler.",
@@ -68,13 +69,15 @@ class PartialEntityCorrection(TestCase):
 
     def test_partial_entity_to_whole(self):
         for i in range(len(self.entities)):
-            self.assertEqual(ent.entity_to_political_party(self.entities[i])[0],
-                             self.correct_full_entities[i][0])
+            self.assertEqual(
+                ent.entity_to_political_party(self.entities[i], building_dict=False, dict_allowed=False)[0],
+                self.correct_full_entities[i][0])
 
     def test_partial_entity_to_party(self):
         for i in range(len(self.entities)):
-            self.assertEqual(ent.entity_to_political_party(self.entities[i])[0],
-                             self.correct_full_entities[i][0])
+            self.assertEqual(
+                ent.entity_to_political_party(self.entities[i], building_dict=False, dict_allowed=False)[1],
+                self.correct_full_entities[i][1])
 
     def test_apolitical_figures_not_associated(self):
         apolitical_entities = ['Sergei Rachmaninoff',
@@ -85,4 +88,4 @@ class PartialEntityCorrection(TestCase):
                                'Nathan Fielder']
         apolitical_entities = [(name, 'PERSON') for name in apolitical_entities]
         for entity in apolitical_entities:
-            self.assertIsNone(ent.entity_to_political_party(entity))
+            self.assertIsNone(ent.entity_to_political_party(entity, building_dict=False, dict_allowed=False))

@@ -8,21 +8,29 @@ This project is a Flask application which takes in the link of a news article, a
 
 
 #### Requirements
+
 Python3, install contents of requirements.txt. Add Reddit API keys to api_keys.py
 
 Create a virtual environment, within this environment run the following command to install all of the requisite packages (nltk, tensorflow, etc).
 
-  pip3 install -r requirements.txt
+  `pip3 install -r requirements.txt`
 
 Next, install the required NLTK corpora dependencies through running the dependency_initialization program in the utilities folder.
 
 #### Flask Launch
 
 Now traverse into the flask directory, and use the following command to point flask to this application.
-  export FLASK_APP=launch_point.py
- 
+  
+  `export FLASK_APP=launch_point.py`
+
+as well as the following command to allow Pywikibot (which we use to pull some wikipedia information) to function.
+
+    `export PYWIKIBOT2_NO_USER_CONFIG=1`
+
+Of course, if run within 
+
 Run the webapp with 
-  python3 -m flask run
+  `python3 -m flask run`
 
 *These instructions have only been tested on a narrow range of hardware. Contact us if they do not work for you.*
 
