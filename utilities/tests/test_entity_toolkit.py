@@ -51,3 +51,38 @@ class NamedEntityDetection(TestCase):
         for sentence in self.sent_none:
             self.assertFalse(ent.identify_entities(sentence))
 
+
+class PartialEntityCorrection(TestCase):
+    """
+    These tests assert the ability of the entity toolkit to correctly expand the
+    """
+
+    entities = ['Obama', 'Trump', 'Hitler', 'Merkel', 'Gingrich']
+    entities = [(e, 'PERSON') for e in entities]
+
+    correct_full_entities = [('Barack Obama', 'Democratic Party'), ('Donald Trump', 'Republican Party'),
+                             ('Adolf Hitler', 'NSDAP'), ('Angela Merkel', 'Christian Democratic Union'),
+                             ('Newt Gingrich', 'Republican Party')]
+
+    assert (len(entities) == len(correct_full_entities))
+
+    def test_partial_entity_to_whole(self):
+        for i in range(len(self.entities)):
+            self.assertEqual(ent.entity_to_political_party(self.entities[i])[0],
+                             self.correct_full_entities[i][0])
+
+    def test_partial_entity_to_party(self):
+        for i in range(len(self.entities)):
+            self.assertEqual(ent.entity_to_political_party(self.entities[i])[0],
+                             self.correct_full_entities[i][0])
+
+    def test_apolitical_figures_not_associated(self):
+        apolitical_entities = ['Sergei Rachmaninoff',
+                               'Steven Patrick Morrissey',
+                               'Bill Hader',
+                               'Jello Biafra',
+                               'Hans Giger',
+                               'Nathan Fielder']
+        apolitical_entities = [(name, 'PERSON') for name in apolitical_entities]
+        for entity in apolitical_entities:
+            self.assertIsNone(ent.entity_to_political_party(entity))

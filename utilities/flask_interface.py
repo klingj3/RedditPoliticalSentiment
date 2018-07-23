@@ -48,8 +48,8 @@ class Interface(object):
             :return:
             """
             try:
-                affiliations = [self.ent_linker.entity_to_political_party(entity=entity, ent_type=ent_type)
-                                for entity, ent_type in found_entities]
+                affiliations = [self.ent_linker.entity_to_political_party(entity_name=entity)
+                                for entity in found_entities]
                 affiliations = [x for x in affiliations if x is not None]
             except (ConnectionError, URLError, JSONDecodeError) as e:
                 # TODO: Diagnose these minor, occasional, and straggling errors.
@@ -93,9 +93,9 @@ class Interface(object):
 
                     # We'll ignore thing that are upper-case too, partially because they're more likely to be
                     # false-positives, but also because people who type in caps aren't contributing to the conversation.
-                    affiliations = [(entity, self.ent_linker.entity_to_political_party(entity=entity, ent_type=ent_type))
+                    affiliations = [(entity, self.ent_linker.entity_to_political_party(entity_name=entity, ent_type=ent_type))
                                     for entity, ent_type in entities
-                                    if self.ent_linker.entity_to_political_party(entity=entity, ent_type=type)
+                                    if self.ent_linker.entity_to_political_party(entity_name=entity, ent_type=type)
                                     and entity != entity.upper()]
 
                     for entity, affiliation in affiliations:
