@@ -5,6 +5,7 @@ from tflearn.data_utils import to_categorical, pad_sequences
 
 import tensorflow as tf
 import tflearn
+import os
 
 # Load requisite datasets.
 stop_words = set(stopwords.words('english'))
@@ -29,15 +30,17 @@ class SentimentClassifier(object):
         self.model = tflearn.DNN(net, tensorboard_verbose=0)
 
         if load_path is None:
+            assert('model.tfl' in save_path)
+            assert(os.path.isdir(save_path[:save_path.index('model.tfl')]))
             self._train_model(save_path)
         else:
             self.model.load(load_path)
 
     def _train_model(self, save_path):
-        '''
+        """
         :param save_path: Path to save the model to
         :return: None
-        '''
+        """
         tf.reset_default_graph()
         train, test = imdb.load_data(num_words=10000, index_from=3)
 
@@ -51,21 +54,23 @@ class SentimentClassifier(object):
         test_y = to_categorical(test_y, nb_classes=2)
 
         # Training
-        self.model.fit(train_x, train_y, n_epoch=5, validation_set=(test_x, test_y), show_metric=True, batch_size=32)
+        self.model.fit(train_x, train_y, n_epoch=10, validation_set=(test_x, test_y), show_metric=True, batch_size=32)
         self.model.save(save_path)
 
     def predict(self, text, full_probs=False):
-        '''
+        """
         :param text: Text to be classified.
         :param full_probs: If true, returns a list containing the negative probability and positive probability, if
                            false returns -1 if probably negative, 0 if unsure, or 1 if probably positive.
         :return: List or value, see above
-        '''
+        """
         words = self.tokenizer.tokenize(text)
         vector = self.words_to_vector(words, max=10000)
         vector = pad_sequences([vector], maxlen=100, value=0.)
         probs = self.model.predict(vector)[0].tolist()
+
         if full_probs:
+            # If full probs, we return a list containing two floats - the possibility the comment is positive
             return probs
         else:
             pos, neg = probs
@@ -75,20 +80,21 @@ class SentimentClassifier(object):
                 return 2*probs.index(max(probs))-1
 
     def vector_to_words(self, vector):
-        '''
+        """
         :param vector: Vector of numbers corresponding to words in the dictionary used in the given corpus
         :return: A string containing all the words corresponding to the numbers in the vector.
-        '''
+        """
         return ' '.join(self.id_to_word[i] for i in vector)
 
     def words_to_vector(self, words, max):
-        '''
+        """
         :param words: A string containing, presumably, multiple words.
         :return: A list of integers starting with 0.
-        '''
+        """
         words[0] = words[0].lower()
         words = [word for word in words if word.lower() not in stop_words]
-        vector = [1] + [self.word_to_id[word] if word in self.word_to_id and self.word_to_id[word] <= max else 2 for word in words]
+        vector = [1] + [self.word_to_id[word] if word in self.word_to_id and self.word_to_id[word] <= max else 2
+                        for word in words]
         return vector
 
 
