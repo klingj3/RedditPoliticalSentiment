@@ -1,2 +1,0 @@
-model_checkpoint_path: "/home/chrx/PycharmProjects/RedditPoliticalSentiment/utilities/trained_models/model.tfl"
-all_model_checkpoint_paths: "/home/chrx/PycharmProjects/RedditPoliticalSentiment/utilities/trained_models/model.tfl"
